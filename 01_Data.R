@@ -63,8 +63,12 @@ if (length(gset) > 1) {
 }
 
 gset <- gset[[idx]]
-GSE3635 <- gset
+
+# Fallback data - in case the GEO server is ot working:
+# GSE3635 <- gset
 # save(GSE3635, file="GSE3635.RData")
+# load(file="GSE3635.RData")
+# gset <- GSE3635
 
 # This is an "Expression Set" - cf.
 # https://bioconductor.org/packages/release/bioc/vignettes/Biobase/inst/doc/ExpressionSetIntroduction.pdf
@@ -179,7 +183,10 @@ if (length(GSE4987) > 1) {
     idx <- 1
 }
 GSE4987 <- GSE4987[[idx]]
+# again: ... Fallback data
 # save(GSE4987, file="GSE4987.RData")
+# load(file="GSE4987.RData")
+
 
 # What is the relationship of these columns to the previous set?
 # Can we/should we merge the two sets?

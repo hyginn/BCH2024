@@ -39,7 +39,7 @@ str(mySet)
 
 
 # QUIZ QUESTION 2 (2 marks):
-# write code to find all rows if mySet that contain an NA value. Assign the row
+# write code to find all rows of mySet that contain an NA value. Assign the row
 # numbers to the variable iNAs
 
 

@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.0
+# Version: 1.1
 #
-# Date:    2017  01  12
+# Date:    2017  01  14
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.1    Merge GSE3635 and GSE4987 expression data sets
 # V 1.0    First final version
 #
 # TODO:
@@ -22,11 +23,257 @@
 # 2. Make an object to hold the data
 # 3. Merge the data
 #
-# Does the dye-swap reveal a bias?
-# (If it does - we should remove the bias ...)
+# == DATAMODEL
+
+# Expression data is typical 2D data that can be organized in a
+# spreasdsheet-like format: every row represents values for one gene/ probe/
+# spot, and every column represents values obtained from one experiment.
+
+# We downloaded two datasets from GEO: the low-resolution dataset GSE3635
+# (sampling at 10' intervals), and the higher-resolution dataset GSE4987
+# (sampling at 5' intervals and including a dye-swap replicate). We can store
+# these datasets in a common matrix - but first we need to validate whether
+# featureNames() retrieves the identical row names. I expect them to, after all
+# the experiments are both associeted with the GPL1914 platform, but we need to
+# check to make sure. First we load the two datasets from the .RData files I
+# have uploaded to the GitHub repository:
 #
-# Impute missing values. How?
+load("GSE3635.RData")
+load("GSE4987.RData")
+
+GSE3635names <- featureNames(GSE3635)
+GSE4987names <- featureNames(GSE4987)
+
+# confirm:
+length(GSE3635names) == length(GSE4987names) # TRUE
+identical(GSE3635names, GSE4987names)  # FALSE
+
+
+# FALSE ???
+# That's not good. Why?
+# Let's check if we can find a difference
+sum(GSE3635names != GSE4987names)
+
+# There seems to be a non-identical element ...
+which(GSE3635names != GSE4987names)
+GSE3635names[1671]
+GSE4987names[1671]
+
+# Well - that's surprising. But we can confirm that these rows are meant to
+# reference identical genes, even though the spelling of the identifier is not
+# consistent.
+
+# confirm this:
+identical(toupper(GSE3635names), toupper(GSE4987names))
+
+# Good. That solves this question.
+
+# This means we can iterate over the rows, extract data from the expression
+# sets, and combine them into a single matrix. Note that we _can_ use a matrix,
+# and don't need a data frame, because all our data points will be numeric
+# values - we don't need to store strings in this object. We will label the
+# rownames with the systematic IDs, and the columns with time. There are just
+# some small issues to consider:
+
+# A: Rownames for the 11 control-rows:
+GSE3635names[1:15]
+# Rownames of a matrix or dataframe must be unique, and they can't include
+# blanks or special characters. There is a function that takes care of this ...
+make.names(GSE3635names[1:15])
+
+# B: Does the dye-swap reveal a bias?
+# Lets randomly pick 500 rows from GSE4987, collect the values for forward and
+# reverse measurements, and plot them:
+set.seed (112358)
+selRows <- sample(1:length(GSE4987names), 1000)
+mySet <- exprs(GSE4987)[selRows, ]
+# Forward experiments are in columns 1:25, reverse experiments are in columns
+# 26:50. Remember that our boxplots had shown that the values range from
+# -2 to 2.
+
+# We can collect the values into two vectors:
+forward <- numeric()
+reverse <- numeric()
+for (i in 1:25) {
+    forward <- c(forward, mySet[ , i])
+    reverse <- c(reverse, mySet[ , i + 25])
+}
+reverse = -reverse # dye-swap changes the expression sign!
+
+length(forward)  # 25,000 values
+
+plot(forward, reverse)
+abline(h = 0, col = "#CCCCFF")
+abline(v = 0, col = "#CCCCFF")
+
+# if the samples were identical (no bias) we would expect them to lie
+# approximately on a diagonal:
+abline(0, 1, col = "#CC0000")
+
+# I think this looks close enough to identical that we will not need to worry
+# about correcting for bias. There are a number of spots that have close to 0
+# values in one direction but are saturated in the other direction, and there is
+# a slight tendency for down-regulated genes in the forward direction to be
+# measured a bit less repressed in the reverse direction, but overall we won't
+# be making huge mistakes if we simply average the values. However, the plot
+# clearly shows us one thing: values of 2 or -2 appear to be measurement
+# artefacts and should be excluded (i.e set to NA).
+
+# We can get and set the values with the exprs() function - eg.  for column 1:
+sum(exprs(GSE4987)[ , 1] ==  2, na.rm = TRUE)
+sum(exprs(GSE4987)[ , 1] == -2, na.rm = TRUE)
+
+# loop over all columns ...
+for (i in 1:length(sampleNames(GSE4987))) {
+    sel <- ! is.na(exprs(GSE4987))[ , i] &       # not NA, and
+           ( exprs(GSE4987)[ , i] ==  2 |        # either 2, or
+             exprs(GSE4987)[ , i] == -2 )        # -2
+    exprs(GSE4987)[sel, i] <- NA                 # replace with NA
+}
+
+# Confirm - repeat the subset and plot:
 #
+set.seed (112358)
+mySet <- exprs(GSE4987)[sample(1:length(GSE4987names), 1000), ]
+forward <- numeric()
+reverse <- numeric()
+for (i in 1:25) {
+    forward <- c(forward, mySet[ , i])
+    reverse <- c(reverse, mySet[ , i + 25])
+}
+reverse = -reverse # dye-swap changes the expression sign!
+plot(forward, reverse, xlim = c(-2, 2), ylim = c(-2, 2))
+abline(h = 0, col = "#CCCCFF")
+abline(v = 0, col = "#CCCCFF")
+abline(0, 1, col = "#CC0000")
+
+# Wait ... why are there still -2 values in "reverse"? Or are there?
+min(reverse, na.rm = TRUE)
+
+# You should appreciate that testing for equality with digital numbers can be
+# tricky, due to the finite accurracy of the internal representation. If this is
+# ever an issue, it is better to test for near-equality, eg. like
+# eps <- 0.001
+# abs(a - b) < eps
+
+# lets not forget to remove the saturated values from the other dataset.
+for (i in 1:length(sampleNames(GSE3635))) {
+    sel <- ! is.na(exprs(GSE3635))[ , i] &       # not NA, and
+           ( exprs(GSE3635)[ , i] ==  2 |        # either 2, or
+             exprs(GSE3635)[ , i] == -2 )        # -2
+    exprs(GSE3635)[sel, i] <- NA                 # replace with NA
+}
+
+# Before merging the sets, we should still test whether the high-res and the
+# low-res experiments give comparable values: remember that the low-res set has
+# samples from 0 to 120 minutes in 10 minute intervals. The high-res set has the
+# same in 5 minute intervals. We can define a logical vector that pulls
+# corresponding values from the high-res dataset - perhaps like so:
+mask <- unlist(strsplit("10101010101010101010101010000000000000000000000000", ""))
+( mask <- as.logical(as.numeric(mask)) )
+# ... or we could have written
+# mask <- c(rep(c(TRUE, FALSE), 13), rep(FALSE, 24))
+# ... or defined the vector "by hand".
+
+# collect values ...
+set.seed (112358)
+sel <- sample(1:length(GSE4987names), 1000)
+myHighSet <- exprs(GSE4987)[sel, mask]
+myLowSet  <- exprs(GSE3635)[sel, ]
+high <- numeric()
+low <- numeric()
+for (i in 1:13) {
+    high <- c(high, myHighSet[ , i])
+    low  <- c(low,   myLowSet[ , i])
+}
+plot(high, low, xlim = c(-2, 2), ylim = c(-2, 2))
+abline(h = 0, col = "#CCCCFF")
+abline(v = 0, col = "#CCCCFF")
+abline(0, 1, col = "#CC0000")
+
+# Hm. What do you think?
+
+# I think that the "low-res" samples are measured in the same sense that we had
+# called "reverse" in the high-res samples. So which is it? Lets look at a
+# cell-cycle gene that we know is regulated in a cyclical fashion - Swi4
+# (YER111C), in row 1726 of our expression sets. According to Figure 1A of
+# Pramilla et al (2006), Swi4 expression should peak at 20, and 80 minutes
+# (columns 3 and 9), just before the G1/S transition:
+
+plot(exprs(GSE3635)[1726, ], type = "b", ylim = c(-1/2, 1/2))
+points(exprs(GSE4987)[1726, mask], type = "b", col = "#CC0000")
+abline(h = 0, col = "#CCCCFF")
+
+# It becomes clear that the low-res samples are low where expression is expected
+# to be high, and if we want to combine the values, we need to invert them, just
+# as we did with the "reverse" samples from the high-res dataset.
+
+# But should we combine samples at all? It's worthwhile to plot a few genes explicitly to check. We'll write a function that pulls out corresponding values for a plot.
+#
+plotProfiles <- function(name) {
+    # plots expression profiles, given a standard name.
+    # datasets GSE3635 and GSE4987 must be present, as well as
+    # the SGD_features table.
+    # Intermediate values for GSE3635 are extrapolated
+    thisID <- SGD_features[which(toupper(SGD_features[ , 3]) == toupper(name)), 2]
+    thisRow <- which(toupper(featureNames(GSE3635)) == toupper(thisID))
+    y <- -exprs(GSE3635)[thisRow, ]
+    y1 <- numeric()
+    y2 <-  exprs(GSE4987)[thisRow, 1:25]
+    y3 <- -exprs(GSE4987)[thisRow, 26:50]
+    y4 <- numeric()
+    for (i in 1:25) {
+        if (i %% 2) { # i is odd
+            y1[i] <- y[floor(i / 2) + 1]
+        } else {      # i is even
+            y1[i] <- mean(c(y[i / 2], y[(i / 2) + 1]), na.rm = TRUE)  # extrapolate
+        }
+        y4[i] <- mean(c(y1[i], y2[i], y3[i]), na.rm = TRUE) # average
+    }
+    sampleTime <- seq(0, 120, by = 5)
+    yMin <- min(c(y1, y2, y3), na.rm = TRUE)
+    yMax <- max(c(y1, y2, y3), na.rm = TRUE)
+    plot(sampleTime, y1,
+         ylim = 1.2 * c(yMin, yMax),
+         xlab = "time (min.)", ylab = "logRatio", main = name,
+         col = "#999999", type = "b")
+    points(sampleTime, y2, type = "b", col = "#CC0000")
+    points(sampleTime, y3, type = "b", col = "#00CC00")
+    points(sampleTime, y4, type = "b", lwd = 2, col = "#000000")
+    abline(h =  0, col = "#CCCCFF")
+    abline(v = 60, col = "#CCCCFF")
+}
+
+plotProfiles("Swi4")
+plotProfiles("Tos4")
+plotProfiles("Mbp1")
+
+# What do you think ? I think the averaging procedure appears successful in that
+# it seems to smooth out consecutive values in the curves, as we would expect
+# from time-series data.
+
+# Thus, to put everything together, we can use code like what we wrote above
+# to write the averaged values into a matrix, row by row:
+nRows <- length(featureNames(GSE4987))
+nCols <- 25
+combinedProfiles <- matrix(numeric(nRows * nCols), nrow = nRows, ncol = nCols)
+for (i in 1:nRows) {
+    y <- -exprs(GSE3635)[i, ]
+    y1 <- numeric()
+    y2 <-  exprs(GSE4987)[i, 1:25]
+    y3 <- -exprs(GSE4987)[i, 26:50]
+    for (j in 1:nCols) {
+        if (j %% 2) { # j is odd
+            y1[j] <- y[floor(j / 2) + 1]
+        } else {      # j is even
+            y1[j] <- mean(c(y[j / 2], y[(j / 2) + 1]), na.rm = TRUE)  # extrapolate
+        }
+        combinedProfiles[i, j] <- mean(c(y1[j], y2[j], y3[j]), na.rm = TRUE)
+    }
+}
+row.names(combinedProfiles) <- featureNames(GSE4987)
+colnames(combinedProfiles) <- sprintf("t.%d", seq(0, 120, by = 5))
+save(combinedProfiles, file = "combinedProfiles.RData")
 
 
 # ==============================================================================

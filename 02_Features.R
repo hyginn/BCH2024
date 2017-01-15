@@ -2,12 +2,14 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.1
+# Version: 1.2
 #
 # Date:    2017  01  14
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
-# V 1.1    Merge GSE3635 and GSE4987 expression data sets
+# V 1.2    Add ygData table to hold gene-information;
+#          Rename combinedProfiles to ygProfiles.
+# V 1.1    Merge GSE3635 and GSE4987 expression data sets.
 # V 1.0    First final version
 #
 # TODO:
@@ -156,7 +158,7 @@ min(reverse, na.rm = TRUE)
 # eps <- 0.001
 # abs(a - b) < eps
 
-# lets not forget to remove the saturated values from the other dataset.
+# let's not forget to remove the saturated values from the other dataset.
 for (i in 1:length(sampleNames(GSE3635))) {
     sel <- ! is.na(exprs(GSE3635))[ , i] &       # not NA, and
            ( exprs(GSE3635)[ , i] ==  2 |        # either 2, or
@@ -208,15 +210,74 @@ abline(h = 0, col = "#CCCCFF")
 # to be high, and if we want to combine the values, we need to invert them, just
 # as we did with the "reverse" samples from the high-res dataset.
 
-# But should we combine samples at all? It's worthwhile to plot a few genes explicitly to check. We'll write a function that pulls out corresponding values for a plot.
+# But should we combine samples at all? It's worthwhile to plot a few genes
+# explicitly to check. We'll write a function that pulls out corresponding
+# values for a plot.
+#
+# === Digression: yeast gene data
+
+# Let's get a little annoyance out of the way first: in order to look up an
+# expression profile by standard name we need to find its systematic name in the
+# SGD_features table. Then we need to search for the systematic name in the
+# vector that featureNames(GSE3635) returns. Consider:
+
+( x <- which(SGD_features$V5 == toupper("Swi4")) )
+( y <- which(featureNames(GSE3635) == SGD_features$V4[x]) )
+
+# This is complex, and error prone - we could easily forget for example that the
+# "x" above references a row in SGD_features, not a row in the expression data.
+# It would be better to have a data frame in which we can store all data for
+# yeast genes for which we have expression profiles, and to make sure that the
+# rows in that data match the rows of the expression profiles. At the same time,
+# we can fix the pesky problem of upper/lower case in systematic names by
+# setting everything to uppercase. Lets call this table "ygData" (yg for "yeast
+# gene").
+
+( N <- length(featureNames(GSE3635)) )
+
+# define the data frame
+ygData <- data.frame(SGD = character(N),
+                     sysName = character(N),
+                     stdName = character(N),
+                     alias = character(N),
+                     description = character(N),
+                     stringsAsFactors = FALSE)
+
+# fill in the data (this takes about half a minute ...)
+for (i in 1:N) {
+    # get the systematic name
+    sn <- toupper(featureNames(GSE3635)[i])
+    # find the row in SGD_features that contains this systematic name
+    sgdRow <- which(toupper(SGD_features$V4) == sn)
+    # if found
+    if (length(sgdRow) == 1) {    #  collect the data and write to ygData
+        ygData$SGD[i] <- SGD_features$V1[sgdRow]
+        ygData$sysName[i] <- SGD_features$V4[sgdRow]
+        ygData$stdName[i] <- SGD_features$V5[sgdRow]
+        ygData$alias[i] <- SGD_features$V6[sgdRow]
+        ygData$description[i] <- SGD_features$V16[sgdRow]
+    }
+}
+row.names(ygData) <- featureNames(GSE4987)
+save(ygData, file = "ygData.RData")
+
+# confirm:
+SGD_features[x, ]
+ygData[y,]
+
+#
+# === Back to merging the two expression data sets
+#
+# We were planning to write a function that pulls out corresponding
+# values from the two expression data sets, for a plot.
 #
 plotProfiles <- function(name) {
-    # plots expression profiles, given a standard name.
-    # datasets GSE3635 and GSE4987 must be present, as well as
-    # the SGD_features table.
-    # Intermediate values for GSE3635 are extrapolated
-    thisID <- SGD_features[which(toupper(SGD_features[ , 3]) == toupper(name)), 2]
-    thisRow <- which(toupper(featureNames(GSE3635)) == toupper(thisID))
+    # Plots expression profiles, given a standard name.
+    # Datasets GSE3635 and GSE4987 must be present, as well as
+    # the ygData table.
+    # Non-observed time-points in GSE3635 are extrapolated
+    # from adjacent measurements.
+    thisRow <- which(toupper(name) == ygData$stdName)
     y <- -exprs(GSE3635)[thisRow, ]
     y1 <- numeric()
     y2 <-  exprs(GSE4987)[thisRow, 1:25]
@@ -256,7 +317,7 @@ plotProfiles("Mbp1")
 # to write the averaged values into a matrix, row by row:
 nRows <- length(featureNames(GSE4987))
 nCols <- 25
-combinedProfiles <- matrix(numeric(nRows * nCols), nrow = nRows, ncol = nCols)
+ygProfiles <- matrix(numeric(nRows * nCols), nrow = nRows, ncol = nCols)
 for (i in 1:nRows) {
     y <- -exprs(GSE3635)[i, ]
     y1 <- numeric()
@@ -268,12 +329,12 @@ for (i in 1:nRows) {
         } else {      # j is even
             y1[j] <- mean(c(y[j / 2], y[(j / 2) + 1]), na.rm = TRUE)  # extrapolate
         }
-        combinedProfiles[i, j] <- mean(c(y1[j], y2[j], y3[j]), na.rm = TRUE)
+        ygProfiles[i, j] <- mean(c(y1[j], y2[j], y3[j]), na.rm = TRUE)
     }
 }
-row.names(combinedProfiles) <- featureNames(GSE4987)
-colnames(combinedProfiles) <- sprintf("t.%d", seq(0, 120, by = 5))
-save(combinedProfiles, file = "combinedProfiles.RData")
+row.names(ygProfiles) <- featureNames(GSE4987)
+colnames(ygProfiles) <- sprintf("t.%d", seq(0, 120, by = 5))
+save(ygProfiles, file = "ygProfiles.RData")
 
 
 # ==============================================================================

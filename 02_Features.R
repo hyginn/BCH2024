@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.3
+# Version: 1.3.1
 #
 # Date:    2017  01  15
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.3.1  Typos and accidentally deleted code in the GEO2R section;
 # V 1.3    Add section to adapt GEO2R code;
 # V 1.2    Add ygData table to hold gene-information;
 #          Rename combinedProfiles to ygProfiles.
@@ -348,7 +349,12 @@ save(ygProfiles, file = "ygProfiles.RData")
 # clarity, but for being easily produced by a code-generator that is triggered
 # by the parameters on the GEO Web-site. Most of it is actually dispensable for
 # our work with the merged datasets. But to figure that out requires a bit of
-# reverse-engineering.
+# reverse-engineering. To get this code from the GEO2R Website, I labeled
+# samples from the forward-dye experiment of GSE4987 as "Mid" (25, 30, 35 and
+# 85, 90, 95 min.) and as "End" (55, 60, 65 and 115, 120 min.) and calculated
+# the Top 250 differentially expressed genes. Here we will adapt it to work with
+# our merged dataset.
+
 
 # In principle, the code goes through three steps:
 # 1. Prepare the data
@@ -356,14 +362,6 @@ save(ygProfiles, file = "ygProfiles.RData")
 # 3. Find genes that are significantly differentially expressed across groups
 # 4. Format results.
 
-# 1. Based on the plots from the last unit, define two groups.
-# 2. Adapt the limma code (from GEO2R) - copy the code below and
-#      edit it in myScript.R. To get this code, I labeled samples
-#      from the forward-dye experiment of GSE4987 as "Mid" (25, 30, 35 and
-#      85, 90, 95 min.) and as "End" (55, 60, 65 and 115, 120 min.) and
-#      calculated the Top 250 differentially expressed genes.
-#    ... adapt it to work with your defined groups, and work on
-#    the merged expression sets.
 
 source("https://bioconductor.org/biocLite.R")
 
@@ -380,7 +378,7 @@ gset <- GSE4987
 
 # === original GEO2R code begins here ==========================================
 
-# With this step, names within the gset object are made conformant to
+# With the first step, names within the gset object are made conformant to
 # R's row- and column name requirements.
 
 # GEO2R > fvarLabels(gset) <- make.names(fvarLabels(gset))
@@ -390,7 +388,7 @@ gset <- GSE4987
 
 # The next step defines groups through a string that was constructed by the GEO
 # server. It contains an "X" for all columns that should be ignored, a number
-# for all columns that should be analyzed, where the number corrsponds to the
+# for all columns that should be analyzed, where the number corresponds to the
 # group. Here the groups are 0 and 1,
 
 # GEO2R > gsms <- "XXXXX000XXX111XXX000XXX11XXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -402,7 +400,7 @@ gset <- GSE4987
 # GEO2R > sml <- sml[sel]
 # GEO2R > gset <- gset[ ,sel]
 
-# We wont be needing this either, but let's rememeber that "sml" is now a vector
+# We won't be needing this either, but let's rememeber that "sml" is now a vector
 # of numbers that label each column with a group it should belong to.
 
 # The next part - calculating log values - may not be correct anyway: the data
@@ -419,8 +417,8 @@ gset <- GSE4987
 # GEO2R > exprs(gset) <- log2(ex) }
 
 # In the next step, the numbers are prefixed with a letter G (G0, G1 ...) and
-# declared to be "factors" in the statistical design. They are attached to GSET.
-# We will have to do something equivalent for our ygData set ...
+# declared to be "factors" in the statistical design. They are attached to gset.
+# We will have to do something equivalent for our ygProfiles set ...
 
 # GEO2R > # set up the data and proceed with analysis
 # GEO2R > sml <- paste("G", sml, sep="")    # set group names
@@ -477,7 +475,8 @@ mytT$ID <- as.character(mytT$ID)
 str(mytT)
 
 # Let's see what we got: let's plot the expression profiles for the top ten
-# genes:
+# genes (note that we are taking the values we are plotting from ygProfiles, our
+# mySet was only needed to discover the genes...):
 
 plot(seq(0, 120, by = 5), rep(0, 25), type = "n",
      ylim = c(-0.6, 0.6),
@@ -493,6 +492,21 @@ for (i in 1:10) {
 }
 
 # ... and let's also plot them according to the values we fed to limma:
+
+plot(1:11, rep(0, 11), type = "n",
+     ylim = c(-0.5, 0.5),
+     xlab = "sample", ylab = "log-ratio expression")
+rect(0.5, -2, 6.5, 2, col = "#F0F8FF", border = NA)   # G0
+rect(6.5, -2, 11.5, 2, col = "#FFEEEE", border = NA)   # G1
+
+sel <- c(6:8, 18:20, 12:14, 24, 25)  # selection of groups ...
+
+for (i in 1:10) {
+    thisID <- mytT$ID[i]
+    points(1:11, ygProfiles[thisID, sel], type = "b")
+}
+
+
 
 # What do we learn? limma will return to us genes that are significantly
 # different in expression according to the groups we define. This is not

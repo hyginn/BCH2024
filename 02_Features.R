@@ -2,13 +2,14 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.3.1
+# Version: 1.4
 #
-# Date:    2017  01  15
+# Date:    2017  01  16
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
-# V 1.3.1  Typos and accidentally deleted code in the GEO2R section;
-# V 1.3    Add section to adapt GEO2R code;
+# V 1.4    Add PCA of expression analysis
+# V 1.3.1  Typos and accidentally deleted code in the GEO2R section.
+# V 1.3    Add section to adapt GEO2R code.
 # V 1.2    Add ygData table to hold gene-information;
 #          Rename combinedProfiles to ygProfiles.
 # V 1.1    Merge GSE3635 and GSE4987 expression data sets.
@@ -481,10 +482,10 @@ str(mytT)
 plot(seq(0, 120, by = 5), rep(0, 25), type = "n",
      ylim = c(-0.6, 0.6),
      xlab = "time", ylab = "log-ratio expression")
-rect(22.5, -2, 37.5, 2, col = "#F0F8FF", border = NA)   # G0
-rect(82.5, -2, 97.5, 2, col = "#F0F8FF", border = NA)   # G0
-rect(52.5, -2, 67.5, 2, col = "#FFEEEE", border = NA)   # G1
-rect(112.5, -2, 122.5, 2, col = "#FFEEEE", border = NA) # G1
+rect( 22.5, -2,  37.5, 2, col = "#dfeaf4", border = NA)   # G0
+rect( 82.5, -2,  97.5, 2, col = "#dfeaf4", border = NA)   # G0
+rect( 52.5, -2,  67.5, 2, col = "#f4dfdf", border = NA)   # G1
+rect(112.5, -2, 122.5, 2, col = "#f4dfdf", border = NA) # G1
 
 for (i in 1:10) {
     thisID <- tT$ID[i]
@@ -496,8 +497,8 @@ for (i in 1:10) {
 plot(1:11, rep(0, 11), type = "n",
      ylim = c(-0.5, 0.5),
      xlab = "sample", ylab = "log-ratio expression")
-rect(0.5, -2, 6.5, 2, col = "#F0F8FF", border = NA)   # G0
-rect(6.5, -2, 11.5, 2, col = "#FFEEEE", border = NA)   # G1
+rect(0.5, -2,  6.5, 2, col = "#dfeaf4", border = NA)   # G0
+rect(6.5, -2, 11.5, 2, col = "#f4dfdf", border = NA)   # G1
 
 sel <- c(6:8, 18:20, 12:14, 24, 25)  # selection of groups ...
 
@@ -700,7 +701,116 @@ for (i in 1:nrow(crabs)) {
 #      PART FOUR: PCA OF THE EXPRESSION DATA SET
 # ==============================================================================
 
-# To be updated - do this at home  ...
+# Principal component analysis can determine structure in our data. Let's apply
+# it to our yGProfiles.
+
+pcaYG <- prcomp(ygProfiles)
+summary(pcaYG)
+
+# Lets plot the importance of the components, with a color gradient that
+# reflects their proportion of variance. Using color appropriately is a very
+# important aspect of data analysis, and crucial for the interpretation of
+# plots. I have uploaded a special script on colour - Colour.R - and I encourage
+# you to work through this before continuing here.
+
+myCol <- colorRampPalette(c("#be0a23",
+                            "#666669", "#99999b", "#bbbbbb","#eeeeec"))
+
+barplot(pcaYG$sdev, col=myCol(length(pcaYG$sdev)))
+
+# We see that the first component explains more than half of the variance. But
+# what does this component correspond to? The contribution of each dimension to
+# this principal component is stored in the $rotation values. These are
+# sometimes called the "eigengenes" for expression analysis - in analogy to the
+# "eigenvalue" of a matrix equation.
+
+plot(seq(0, 120, by = 5), pcaYG$rotation[,1], type = "b",
+     ylim = c(-0.5, 0.5), col = myCol(length(pcaYG$sdev))[1],
+     xlab = "time", ylab = "rotations")
+# This tells us that the most common variation of the data corresponds to a
+# global response in expression, right after the start of the experiment.
+
+# What about the second component?
+points(seq(0, 120, by = 5), pcaYG$rotation[,2], type = "b",
+       col = myCol(length(pcaYG$sdev))[2])
+# Here we see a cyclical response.
+
+# Let's plot the first twelve components
+opar <- par(mfrow = c(3,4), mar = c(0.5,0.5,0.5,0.5))
+for (i in 1:12) {
+    plot(seq(0, 120, by = 5), pcaYG$rotation[,i], type = "b",
+         col = myCol(length(pcaYG$sdev))[i],
+         xlab = "", ylab = "",
+         axes = FALSE, frame.plot = TRUE)
+    abline(h =  0, col = "#CCDDFF")
+    abline(v = 60, col = "#CCDDFF")
+}
+par(opar)
+
+# This is pretty interesting: we see global decaying response (PC1), cyclical
+# responses that correspond to two cycles (PC2, 3, 4, and 6) - which are
+# phase-shifted, another more global change (PC5), and components that may
+# correspond to noise. Now we can ask: which genes correspond to these
+# prototypes?
+
+# The actual values (sometimes called "loadings") of the PCs for each gene are
+# stored in the pcaYG$x matrix. For example, we can retrieve the ten genes that
+# are most correlated with PC2. I use the order() function, which returns
+# indices of values in a vector. This is a very useful function. Consider:
+#
+set.seed(123)
+( x <- sample(1:30, 10) )
+order(x, decreasing = TRUE)
+
+# This means: the highest value is in position 9, the second highest in 5, the
+# third highest in 4, etc. So I can use this, e.g. to pick the four highest
+# values from x
+  order(x, decreasing = TRUE)[1:4]
+x[order(x, decreasing = TRUE)[1:4]]
+
+# order() is similar to sort(), but different in that it returns indices, which
+# we can use for selections.
+
+# get the ten highest values from pcaYG$x[,2] ...
+( sel <- order(pcaYG$x[ ,2], decreasing = TRUE)[1:10] )
+pcaYG$x[sel, 2]
+
+# ... list what genes these are ...
+ygData[sel, c("stdName", "alias")]
+
+# ... and plot their expression profiles
+plot(seq(0, 120, by = 5), rep(0, 25), type = "n",
+     ylim = c(-1.5, 1.5),
+     xlab = "time", ylab = "log-ratio expression")
+rect( 22.5, -2,  37.5, 2, col = "#dfeaf4", border = NA)   # G0
+rect( 82.5, -2,  97.5, 2, col = "#dfeaf4", border = NA)   # G0
+rect( 52.5, -2,  67.5, 2, col = "#f4dfdf", border = NA)   # G1
+rect(112.5, -2, 122.5, 2, col = "#f4dfdf", border = NA)   # G1
+
+for (i in 1:10) {
+    points(seq(0, 120, by = 5), ygProfiles[sel[i], ], type = "b")
+}
+
+# Note that these are well-defined, cyclically expressed genes - however we
+# would likely NOT have discovered them with our differential expression
+# analysis, because they are NOT CONSTANT in the regions we have defined for
+# grouping.
+
+# This is an important difference: while we used intuition to define groups for
+# discovery of differential expression, PCA gives us a way to look at the data
+# with less bias, giving a greater voice to the dynamics within the data itself.
+# We will explore next how we can apply regression analysis for alternative
+# approaches to discover interesting genes.
+
+# == TASK
+#  -  Explore this some more and plot additional selections - e.g. the ten
+#     highest and lowest values from other PCs.
+#
+# Hand in:
+#   - Write code to plot the genes with the five highest and lowest loadings
+#     of PC1, highest in black, and lowest in red.
+
+
 
 
 
@@ -708,7 +818,7 @@ for (i in 1:nrow(crabs)) {
 #      PART FIVE: READING GO AND GOA DATA
 # ==============================================================================
 
-# To be updated - do this at home  ...
+# To be updated - later.
 
 
 

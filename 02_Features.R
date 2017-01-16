@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.2
+# Version: 1.3
 #
-# Date:    2017  01  14
+# Date:    2017  01  15
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.3    Add section to adapt GEO2R code;
 # V 1.2    Add ygData table to hold gene-information;
 #          Rename combinedProfiles to ygProfiles.
 # V 1.1    Merge GSE3635 and GSE4987 expression data sets.
@@ -341,6 +342,20 @@ save(ygProfiles, file = "ygProfiles.RData")
 #      PART TWO: USE limma TO CALCULATE DIFFERENTIAL EXPRESSION
 # ==============================================================================
 
+# === ADAPTING LIMMA CODE
+
+# The GEO2R limma code is virtually uncommented, and has not been written for
+# clarity, but for being easily produced by a code-generator that is triggered
+# by the parameters on the GEO Web-site. Most of it is actually dispensable for
+# our work with the merged datasets. But to figure that out requires a bit of
+# reverse-engineering.
+
+# In principle, the code goes through three steps:
+# 1. Prepare the data
+# 2. Define groups that are to be contrasted
+# 3. Find genes that are significantly differentially expressed across groups
+# 4. Format results.
+
 # 1. Based on the plots from the last unit, define two groups.
 # 2. Adapt the limma code (from GEO2R) - copy the code below and
 #      edit it in myScript.R. To get this code, I labeled samples
@@ -357,49 +372,138 @@ if (!require(limma, quietly=TRUE)) {
     library(limma)
 }
 
+# The GEO dataset that this code was produced for is GSE4987
+load("GSE4987.RData")
+# The script uses the object name "gset" for the data
+gset <- GSE4987
+
 
 # === original GEO2R code begins here ==========================================
 
-fvarLabels(gset) <- make.names(fvarLabels(gset))
+# With this step, names within the gset object are made conformant to
+# R's row- and column name requirements.
 
-# group names for all samples
-gsms <- "XXXXX000XXX111XXX000XXX11XXXXXXXXXXXXXXXXXXXXXXXXX"
-sml <- c()
-for (i in 1:nchar(gsms)) { sml[i] <- substr(gsms,i,i) }
+# GEO2R > fvarLabels(gset) <- make.names(fvarLabels(gset))
 
-# eliminate samples marked as "X"
-sel <- which(sml != "X")
-sml <- sml[sel]
-gset <- gset[ ,sel]
+# We won't be needing this since we are handling our own annotations in ygData.
+# We could use the anotations in gset, but they are now more than ten years old.
 
-# log2 transform
-ex <- exprs(gset)
-qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
+# The next step defines groups through a string that was constructed by the GEO
+# server. It contains an "X" for all columns that should be ignored, a number
+# for all columns that should be analyzed, where the number corrsponds to the
+# group. Here the groups are 0 and 1,
 
-# Note: Careful! Is this correct? Are the values not log-transformed already?
-LogC <- (qx[5] > 100) ||
-    (qx[6]-qx[1] > 50 && qx[2] > 0) ||
-    (qx[2] > 0 && qx[2] < 1 && qx[4] > 1 && qx[4] < 2)
-if (LogC) { ex[which(ex <= 0)] <- NaN
-exprs(gset) <- log2(ex) }
+# GEO2R > gsms <- "XXXXX000XXX111XXX000XXX11XXXXXXXXXXXXXXXXXXXXXXXXX"
+# GEO2R > sml <- c()
+# GEO2R > for (i in 1:nchar(gsms)) { sml[i] <- substr(gsms,i,i) }
 
-# set up the data and proceed with analysis
-sml <- paste("G", sml, sep="")    # set group names
-fl <- as.factor(sml)
-gset$description <- fl
-design <- model.matrix(~ description + 0, gset)
-colnames(design) <- levels(fl)
-fit <- lmFit(gset, design)
-cont.matrix <- makeContrasts(G1-G0, levels=design)
-fit2 <- contrasts.fit(fit, cont.matrix)
-fit2 <- eBayes(fit2, 0.01)
-tT <- topTable(fit2, adjust="fdr", sort.by="B", number=250)
+# GEO2R >  eliminate samples marked as "X"
+# GEO2R > sel <- which(sml != "X")
+# GEO2R > sml <- sml[sel]
+# GEO2R > gset <- gset[ ,sel]
 
-tT <- subset(tT, select=c("ID","adj.P.Val","P.Value","t","B","logFC","Gene.symbol","Gene.title"))
-write.table(tT, file=stdout(), row.names=F, sep="\t")
-# === original GEO2R code ends here ============================================
+# We wont be needing this either, but let's rememeber that "sml" is now a vector
+# of numbers that label each column with a group it should belong to.
 
+# The next part - calculating log values - may not be correct anyway: the data
+# seem to contain log-ratio values already, since they are symmetric about 0.
+
+# GEO2R > # log2 transform
+# GEO2R > ex <- exprs(gset)
+# GEO2R > qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
+
+# GEO2R > LogC <- (qx[5] > 100) ||
+# GEO2R >     (qx[6]-qx[1] > 50 && qx[2] > 0) ||
+# GEO2R >     (qx[2] > 0 && qx[2] < 1 && qx[4] > 1 && qx[4] < 2)
+# GEO2R > if (LogC) { ex[which(ex <= 0)] <- NaN
+# GEO2R > exprs(gset) <- log2(ex) }
+
+# In the next step, the numbers are prefixed with a letter G (G0, G1 ...) and
+# declared to be "factors" in the statistical design. They are attached to GSET.
+# We will have to do something equivalent for our ygData set ...
+
+# GEO2R > # set up the data and proceed with analysis
+# GEO2R > sml <- paste("G", sml, sep="")    # set group names
+# GEO2R > fl <- as.factor(sml)
+# GEO2R > gset$description <- fl
+
+# The limma functions and objects depend on being of a certain class. It's not
+# trivial to make a valid object from raw numbers. But we can just copy the
+# GSE4987 dataset, remove all but 11 columns, and overwrite the data with
+# our combined data values.  Our orginal dataset grouped columns 6,7,8 and 18,
+# 19, 20 into group 0, columns 12, 13, 14 and 24, 25 into group 1.
+sel <- c(6:8, 18:20, 12:14, 24, 25)
+mySet <- GSE4987[ , sel]
+colnames(mySet) <- colnames(myExpr)
+exprs(mySet) <- ygProfiles[ , sel]
+colnames(mySet) <- colnames(ygProfiles)[sel]
+
+# GEO2R > design <- model.matrix(~ description + 0, gset)
+# GEO2R > colnames(design) <- levels(fl)
 #
+# We define a vector of group labels and build the "design Matrix" for the
+# statistical test:
+( myGroups <- as.factor(paste("G", c(rep(0, 6), rep(1, 5)), sep="")) )
+myDesign <- model.matrix(~ myGroups + 0, mySet)
+colnames(myDesign) <- levels(myGroups)
+myDesign
+
+# GEO2R > fit <- lmFit(gset, design)
+#
+# Now we can calculate the fit to a linear model, depending on the two factors
+myFit <- lmFit(mySet, myDesign)
+
+
+# GEO2R > cont.matrix <- makeContrasts(G1-G0, levels=design)
+# GEO2R > fit2 <- contrasts.fit(fit, cont.matrix)
+# GEO2R > fit2 <- eBayes(fit2, 0.01)
+# GEO2R > tT <- topTable(fit2, adjust="fdr", sort.by="B", number=250)
+
+# GEO2R > tT <- subset(tT, select=c("ID","adj.P.Val","P.Value","t","B","logFC","Gene.symbol","Gene.title"))
+# GEO2R > write.table(tT, file=stdout(), row.names=F, sep="\t")
+
+myCont.matrix <- makeContrasts(G1-G0, levels = myDesign)
+myFit2 <- contrasts.fit(myFit, myCont.matrix)
+myFit2 <- eBayes(myFit2, 0.01)
+myTable <- topTable(myFit2, adjust="fdr", sort.by="B", number = 50)
+
+mytT <- subset(myTable, select=c("ID","P.Value","B","Gene.symbol","Gene.title"))
+write.table(mytT, file=stdout(), row.names=F, sep="\t")
+
+# Careful - these IDs are now factors, which will mess up our use to extract
+# values according to gene IDs. Not going into the details here but:
+str(mytT)
+mytT$ID <- as.character(mytT$ID)
+str(mytT)
+
+# Let's see what we got: let's plot the expression profiles for the top ten
+# genes:
+
+plot(seq(0, 120, by = 5), rep(0, 25), type = "n",
+     ylim = c(-0.6, 0.6),
+     xlab = "time", ylab = "log-ratio expression")
+rect(22.5, -2, 37.5, 2, col = "#F0F8FF", border = NA)   # G0
+rect(82.5, -2, 97.5, 2, col = "#F0F8FF", border = NA)   # G0
+rect(52.5, -2, 67.5, 2, col = "#FFEEEE", border = NA)   # G1
+rect(112.5, -2, 122.5, 2, col = "#FFEEEE", border = NA) # G1
+
+for (i in 1:10) {
+    thisID <- tT$ID[i]
+    points(seq(0, 120, by = 5), ygProfiles[thisID, ], type = "b")
+}
+
+# ... and let's also plot them according to the values we fed to limma:
+
+# What do we learn? limma will return to us genes that are significantly
+# different in expression according to the groups we define. This is not
+# necessarily the same as a cyclically varying gene, nor does it necessarily
+# find the genes whose expression levels are _most_ different, i.e. if the
+# variance of a highly, differentially expressed gene within a group is large,
+# it may not be very significant. Also, we are not exploiting the fact that
+# these values are time series. Nevertheless, we find genes for which we see a
+# change in expression levels along two cell-cycles.
+
+
 # What genes does this discover?
 
 

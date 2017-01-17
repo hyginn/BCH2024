@@ -433,9 +433,8 @@ gset <- GSE4987
 # 19, 20 into group 0, columns 12, 13, 14 and 24, 25 into group 1.
 sel <- c(6:8, 18:20, 12:14, 24, 25)
 mySet <- GSE4987[ , sel]
-colnames(mySet) <- colnames(myExpr)
-exprs(mySet) <- ygProfiles[ , sel]
 colnames(mySet) <- colnames(ygProfiles)[sel]
+exprs(mySet) <- ygProfiles[ , sel]
 
 # GEO2R > design <- model.matrix(~ description + 0, gset)
 # GEO2R > colnames(design) <- levels(fl)

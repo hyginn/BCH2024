@@ -8,6 +8,8 @@ if (! file.exists("myScript.R")) {
     file.copy("tmp.R", "myScript.R")
 }
 
+source(".utilities.R")
+
 file.edit("BCH2024.R")
 
 # [End]

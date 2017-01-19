@@ -183,7 +183,89 @@ mean(myResid)
 # ==============================================================================
 
 # Impulse function:
+# (Code courtesy of Scott :-)
 
+# Model for impulse data
+impEx <- function(h0, h1, h2, t1, t2, B, x) {
+    S1 <- 1 / (1 + exp(1)^(-B * (x - t1)))
+    S2 <- 1 / (1 + exp(1)^(B * (x - t2)))
+
+    s1 <- h0 + (h1 - h0) * S1
+    s2 <- h2 + (h1 - h2) * S2
+
+    f <- ((1 / h1) * s1 * s2)
+
+    return(f)
+}
+
+# Adding error to the impulse data calcualtion
+impEx2 <- function(h0, h1, h2, t1, t2, B, x, err = 1) {
+    noise <- (1-err) * rnorm(length(x))
+
+    S1 <- 1 / (1 + exp(1)^(-B * (x - t1)))
+    S2 <- 1 / (1 + exp(1)^(B * (x - t2)))
+
+    s1 <- h0 + (h1 - h0) * S1
+    s2 <- h2 + (h1 - h2) * S2
+
+    f <- ((1 / h1) * s1 * s2) + noise
+
+    return(f)
+}
+
+# Function to plot the model
+plotModel <- function(h0, h1, h2, t1, t2, B, x, thisCol = "#CC0000", plt = TRUE) {
+
+    ex <- impEx(h0, h1, h2, t1, t2, B, x)
+    if (plt) {
+        plot(x, ex, col = thisCol, type = "b",
+             xlab = "t (min.)", ylab = "expression log-ratio",
+             main = "Model",
+             sub = sprintf("ho: %5.3f, h1: %5.3f, h2: %5.3f, t1: %5.3f, t2: %5.3f, B: %5.3f", h0, h1, h2, t1, t2, B)
+        )
+        abline(h =  0, col = "#DDEEFF")
+        abline(v = 60, col = "#DDEEFF")
+    } else {
+        points(x, ex, col = thisCol, type = "l")
+    }
+}
+
+# Plot the model
+x <- 1:100
+plotModel(1, 10, 5, 20, 30, 1, x)
+
+x <- 1:100
+plotModel(4.8, -8, 10.8, 19.8, 30, 1, x)
+
+
+
+# Generate and plot some synthetic data with errors
+y <- impEx2(1, 10, 5, 20, 30, 1, x, 0.5)
+plot(x, y, type = "b")
+
+
+
+# Perform a fit on the synthetic data
+myFit <- nls(y ~ impEx(h0, h1, h2, t1, t2, B, x),
+             start = list(h0 = 6,
+                          h1 = -8,
+                          h2 = 0,
+                          t1 = 18,
+                          t2 = 32,
+                          B = 1.3 ))
+
+# Plot the fit over the synthetic data
+plotModel(x = x, h0 = coef(myFit)["h0"],
+          h1 = coef(myFit)["h1"],
+          h2 = coef(myFit)["h2"],
+          t1 = coef(myFit)["t1"],
+          t2 = coef(myFit)["t2"],
+          B = coef(myFit)["B"],
+          thisCol = "#CC0000", plt = FALSE)
+
+# Try this with real data
+
+GSE59784 <- read.delim("GSE59784_rna.norm.txt")
 
 
 

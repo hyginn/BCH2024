@@ -487,7 +487,7 @@ rect( 52.5, -2,  67.5, 2, col = "#f4dfdf", border = NA)   # G1
 rect(112.5, -2, 122.5, 2, col = "#f4dfdf", border = NA) # G1
 
 for (i in 1:10) {
-    thisID <- tT$ID[i]
+    thisID <- mytT$ID[i]
     points(seq(0, 120, by = 5), ygProfiles[thisID, ], type = "b")
 }
 

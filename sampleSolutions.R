@@ -152,8 +152,38 @@ myDat <- data.frame( fl = c(
     141.4267,  103.9856,  137.1076,  88.6598,   106.0739),
     t = 1:77)
 
+plot(myDat$t, myDat$fl)
+# N_t = N_0 * exp(-lambda * t)
+#
+# 1/2 = exp(-lambda * t_half)
+# log(2)/t_half = lambda
+
+expDecay <- function(t, N_0, t_half) {
+    lambda <- log(2)/t_half
+    return(N_0 * exp(-lambda * t))
+}
+
+points(0:80, expDecay(0:80, 729, 28), type="l", col="#00CC00")
+
 # How can we model this?
+y <- myDat$fl
+myFit <- nls(y ~ expDecay(myDat$t, N_0, t_half),
+             start = list(N_0 = 729, t_half = 28))
+
+points(myDat$t, expDecay(myDat$t, coef(myFit)["N_0"], coef(myFit)["t_half"]),
+       type="l", col="#00CC00")
+
 # What are the relevant parameters?
+
+myResid <- resid(myFit)
+plot(myDat$t, myResid )
+
+cor(myDat$t, myResid )  # small. Good.
+mean(myResid)
+# ==============================================================================
+
+# Impulse function:
+
 
 
 

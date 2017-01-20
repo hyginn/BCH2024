@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.4
+# Version: 1.4.1
 #
-# Date:    2017  01  16
+# Date:    2017  01  18
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.4.1  Typo
 # V 1.4    Add PCA of expression analysis
 # V 1.3.1  Typos and accidentally deleted code in the GEO2R section.
 # V 1.3    Add section to adapt GEO2R code.

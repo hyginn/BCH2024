@@ -59,6 +59,26 @@ pBar <- function(i, l, nCh = 50) {
     }
 }
 
+checkFit <- function(iRow, fit) {
+    t <- seq(0, 120, by = 5)
+    y <- ygProfiles[iRow, ]
+    plot(t, ygProfiles[iRow, ], col = "black", type = "b",
+         xlab = "t (min.)", ylab = "expression log-ratio",
+         main = sprintf("%d: %s (%s)",
+                        iRow,
+                        ygData$sysName[iRow],
+                        ygData$stdName[iRow]))
+    abline(h =  0, col = "#DDEEFF")
+    abline(v = 60, col = "#DDEEFF")
+    mtext(sprintf("Parameters: cor: %5.3f, %s",
+                  cor(y, predict(fit)),
+                  paste(names(coef(fit)),
+                        sprintf("%5.3f", coef(fit))
+                        , sep = ": ", collapse = ", ")),
+          col = "#DD99CC", side = 1, line = 4)
+    points(t, predict(fit), col = "#DD99CC", type = "l")
+}
+
 
 
 # [END]

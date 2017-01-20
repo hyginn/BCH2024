@@ -212,6 +212,7 @@ impEx2 <- function(h0, h1, h2, t1, t2, B, x, err = 1) {
 
     return(f)
 }
+exp(-B * (x - t1))
 
 # Function to plot the model
 plotModel <- function(h0, h1, h2, t1, t2, B, x, thisCol = "#CC0000", plt = TRUE) {
@@ -265,7 +266,72 @@ plotModel(x = x, h0 = coef(myFit)["h0"],
 
 # Try this with real data
 
-GSE59784 <- read.delim("GSE59784_rna.norm.txt")
+GSE59784 <- read.delim("GSE59784_rna.norm.txt", stringsAsFactors = FALSE)
+GSE59784 <- GSE59784[c(1, seq(4, 28, by=4))] # Replicate 1 of LPS only
+# save(GSE59784, file="GSE59784.RData")
+load(file="GSE59784.RData")
+
+ncol(GSE59784)
+grep("Nfkb1", GSE59784[,1])
+GSE59784[846,]
+t <- c(0, 1, 2, 4, 6, 9, 12)
+plot(t, GSE59784[846, 2:8])
+
+y <- unlist(GSE59784[846, 2:8])
+plot(t, y, ylim = c(200, 1000))
+myFit <- nls(y ~ impEx(h0, h1, h2, t1, t2, B, t),
+             start = list(h0 = 200,
+                          h1 = 1000,
+                          h2 = 500,
+                          t1 = 1,
+                          t2 = 4,
+                          B = 10 ))
+
+plotModel(200, 1000, 500, 1, 4, 10, t, plt = FALSE)
+
+# ... won't fit
+
+# Try with function nlrob() in package "robustbase"
+install.packages("robustbase")
+library(robustbase)
+
+y <- unlist(GSE59784[846, 2:8])
+set.seed(112358)
+myLower <- c(-1000,  800, 400, 0.3, 2.0, 0.5)
+myUpper <- c(  500, 1800, 500, 1.5, 6.0, 5.0)
+names(myLower) <- c("h0", "h1", "h2", "t1", "t2", "B")
+names(myUpper) <- c("h0", "h1", "h2", "t1", "t2", "B")
+
+plot(t, y, ylim = c(0, 1000))
+
+# ... this takes a few seconds
+myFit <- nlrob(y ~ impEx(h0, h1, h2, t1, t2, B, t),
+               data = data.frame(y = y, t = t),
+               method = "tau",
+               lower = myLower,
+               upper = myUpper)
+
+myFit
+p <- coef(myFit)
+
+plotModel(p["h0"], p["h1"], p["h2"], p["t1"], p["t2"], p["B"],
+          seq(0, 12, by = 0.2), plt = FALSE)
+
+# Yay!
+# However, I can't get nls() to fit this, even with the exact parameters:
+
+myNlsFit <- nls(y ~ impEx(h0, h1, h2, t1, t2, B, t),
+             start = list(h0 = p["h0"],
+                          h1 = p["h1"],
+                          h2 = p["h2"],
+                          t1 = p["t1"],
+                          t2 = p["t2"],
+                          B = p["B"] ))
+
+# Therefore: nlrob() FTW! ... but it takes quite a bit longer than nls()
+
+
+
 
 
 

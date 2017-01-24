@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Machine Learning
 #
-# Version: 1.0
+# Version: 1.1
 #
 # Date:    2017  01  12
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.1    Added h2o for crabs example
 # V 1.0    First version
 #
 # TODO:
@@ -14,8 +15,6 @@
 #    https://www.r-bloggers.com/what-are-the-best-machine-learning-packages-in-r/
 #    https://cran.r-project.org/web/views/MachineLearning.html
 #    https://cran.r-project.org/web/packages/h2o/index.html
-
-# Can we distinguish Swi4 targets from Mbp1 targets?
 
 #
 # ==============================================================================
@@ -166,7 +165,90 @@ myPredictions <- predict(fit.lda, crabsVal)
 confusionMatrix(myPredictions, crabsVal$spsx)
 
 
-# ...
+# ==============================================================================
+#      PART TWO: "INDUSTRY STRENGTH" ML WTIH h2o
+# ==============================================================================
+
+# h2o is a large, open platform for data science written in Java. After
+# installing the package, an instance of h2o will run as a server for analysis
+# and allow the R h2o package functions to interact with it. Installation from
+# CRAN should be straightforward - even though the CRAN package has no actual
+# h2o code, the required java "jar" file will be downloaded when the h2o.init()
+# is called for the first time.
+#
+
+if (! require(h2o, quietly = TRUE)) {
+    install.packages("h2o")
+    library(h2o)
+}
+
+H2O <- h2o.init()
+
+# Prepare data again, to be sure ...
+data(crabs)
+crabs$spsx <- as.factor(paste(crabs[, 1], crabs[, 2],sep="."))
+crabs <- crabs[,-(1:3)]
+set.seed(112358)
+N <- nrow(crabs)
+sel <- sample(1:N, round(N * 0.2))
+crabsVal <- crabs[sel, ]
+crabs <- crabs[-sel, ]
+
+# Prepare our dataset for h2o in h2o's .hex (hexadecimal) format:
+crabs.hex <- as.h2o(crabs)
+str(crabs.hex)
+
+# Let's run a "Deep Neural Network" model (cf.
+# https://en.wikipedia.org/wiki/Deep_learning for the concepts and vocabulary,
+# also see http://docs.h2o.ai/h2o/latest-stable/h2o-docs/glossary.html for an
+# h2o glossary) out of the box with all-default parameters:
+( fit.h2o <- h2o.deeplearning(x = 1:5, y = 6, training_frame = crabs.hex) )
+
+( myH2OPred <- h2o.predict(fit.h2o, as.h2o(crabsVal)) )
+h2o.confusionMatrix(fit.h2o, as.h2o(crabsVal))
+
+# This result is not very impressive - 21/40 errors! cf. our lda result:
+confusionMatrix(myPredictions, crabsVal$spsx)
+# ... with only 4/40 errors.
+
+# Try to improve these results by tuning the parameters: ten-fold
+# cross-validation (default is none), three hidden layers of smaller size
+# (default is c(200, 200)), set activation function to tanh (sigmoidal) (default
+# is "Rectifier"), and use LOTS of iterations (default is only 10):
+fit.h2o.2 <- h2o.deeplearning(
+    x = 1:5,
+    y = 6,
+    training_frame = crabs.hex,
+    hidden = c(8, 8, 8),
+    activation = "Tanh",
+    epochs = 5000,
+    nfolds = 10,
+    fold_assignment = "AUTO"
+)
+h2o.confusionMatrix(fit.h2o.2, as.h2o(crabsVal))
+
+# Impressively, the result is now almost perfect (only 1/40 errors). It's
+# worthwhile to play around with the parameters aned see how they influence
+# processing time and accuracy. You will find that not always will more layers,
+# more nodes, more iterations lead to better results. You can also get a sense
+# that you can burn A LOT of processing power building these models - but the
+# results can also be very, very good. And that's the whole point, after all.
+
+# Before you leave, don't forget to shut down the h2o server instance again, or
+# it will keep on running in the background!
+h2o.shutdown(prompt=FALSE)
+
+
+# ==============================================================================
+#      PART THREE: ML OF EXPRESSION DATA
+# ==============================================================================
+
+# Try to distinguish Mbp1 target genes from Swi4 target genes - is that
+# possible?
+
+# ... TBC
+#
+#
 
 
 

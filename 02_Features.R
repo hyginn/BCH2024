@@ -2,11 +2,12 @@
 #
 # Purpose:  BCH2024 - Features
 #
-# Version: 1.4.1
+# Version: 1.5
 #
-# Date:    2017  01  18
+# Date:    2017  01  25
 # Author:  Boris Steipe (boris.steipe@utoronto.ca)
 #
+# V 1.5    Corrected the inverted sense of the expression values.
 # V 1.4.1  Typo
 # V 1.4    Add PCA of expression analysis
 # V 1.3.1  Typos and accidentally deleted code in the GEO2R section.
@@ -40,7 +41,7 @@
 # (sampling at 5' intervals and including a dye-swap replicate). We can store
 # these datasets in a common matrix - but first we need to validate whether
 # featureNames() retrieves the identical row names. I expect them to, after all
-# the experiments are both associeted with the GPL1914 platform, but we need to
+# the experiments are both associated with the GPL1914 platform, but we need to
 # check to make sure. First we load the two datasets from the .RData files I
 # have uploaded to the GitHub repository:
 #
@@ -85,7 +86,7 @@ identical(toupper(GSE3635names), toupper(GSE4987names))
 GSE3635names[1:15]
 # Rownames of a matrix or dataframe must be unique, and they can't include
 # blanks or special characters. There is a function that takes care of this ...
-make.names(GSE3635names[1:15])
+( GSE3635names[1:15] <- make.names(GSE3635names[1:15]) )
 
 # B: Does the dye-swap reveal a bias?
 # Lets randomly pick 500 rows from GSE4987, collect the values for forward and
@@ -119,10 +120,10 @@ abline(0, 1, col = "#CC0000")
 # I think this looks close enough to identical that we will not need to worry
 # about correcting for bias. There are a number of spots that have close to 0
 # values in one direction but are saturated in the other direction, and there is
-# a slight tendency for down-regulated genes in the forward direction to be
-# measured a bit less repressed in the reverse direction, but overall we won't
-# be making huge mistakes if we simply average the values. However, the plot
-# clearly shows us one thing: values of 2 or -2 appear to be measurement
+# a slight tendency for strongly down-regulated genes in the forward direction
+# to be measured a bit less repressed in the reverse direction, but overall we
+# won't be making huge mistakes if we simply average the values. However, the
+# plot clearly shows us one thing: values of 2 or -2 appear to be measurement
 # artefacts and should be excluded (i.e set to NA).
 
 # We can get and set the values with the exprs() function - eg.  for column 1:
@@ -201,18 +202,18 @@ abline(0, 1, col = "#CC0000")
 
 # I think that the "low-res" samples are measured in the same sense that we had
 # called "reverse" in the high-res samples. So which is it? Lets look at a
-# cell-cycle gene that we know is regulated in a cyclical fashion - Swi4
-# (YER111C), in row 1726 of our expression sets. According to Figure 1A of
-# Pramilla et al (2006), Swi4 expression should peak at 20, and 80 minutes
-# (columns 3 and 9), just before the G1/S transition:
+# cell-cycle gene that we know is regulated in a cyclical fashion - Fkh1
+# (YIL131C), in row 2914 of our expression sets. According to Figure 1A of
+# Pramilla et al (2006), Fkh1 expression should peak at 40, and 100 minutes
+# (columns 10 and 21), in the middle of the S-phase (magenta peaks):
 
-plot(exprs(GSE3635)[1726, ], type = "b", ylim = c(-1/2, 1/2))
-points(exprs(GSE4987)[1726, mask], type = "b", col = "#CC0000")
-abline(h = 0, col = "#CCCCFF")
+plot(exprs(GSE3635)[2914, ], type = "b", ylim = c(-1/2, 1/2))
+points(exprs(GSE4987)[2914, mask], type = "b", col = "#CC0000")
+abline(h = 0, col = "#FFCCFF")
 
-# It becomes clear that the low-res samples are low where expression is expected
-# to be high, and if we want to combine the values, we need to invert them, just
-# as we did with the "reverse" samples from the high-res dataset.
+# It becomes clear that the hig-res samples (red) are low where expression is
+# expected to be high, and if we want to combine the values, we need to invert
+# them, and in fact our "reverse" samples have the correct sense.
 
 # But should we combine samples at all? It's worthwhile to plot a few genes
 # explicitly to check. We'll write a function that pulls out corresponding
@@ -282,10 +283,10 @@ plotProfiles <- function(name) {
     # Non-observed time-points in GSE3635 are extrapolated
     # from adjacent measurements.
     thisRow <- which(toupper(name) == ygData$stdName)
-    y <- -exprs(GSE3635)[thisRow, ]
+    y <-  exprs(GSE3635)[thisRow, ]
     y1 <- numeric()
-    y2 <-  exprs(GSE4987)[thisRow, 1:25]
-    y3 <- -exprs(GSE4987)[thisRow, 26:50]
+    y2 <- -exprs(GSE4987)[thisRow, 1:25]
+    y3 <- exprs(GSE4987)[thisRow, 26:50]
     y4 <- numeric()
     for (i in 1:25) {
         if (i %% 2) { # i is odd
@@ -309,9 +310,10 @@ plotProfiles <- function(name) {
     abline(v = 60, col = "#CCCCFF")
 }
 
-plotProfiles("Swi4")
+plotProfiles("Fkh1")
 plotProfiles("Tos4")
 plotProfiles("Mbp1")
+plotProfiles("Swi5")
 
 # What do you think ? I think the averaging procedure appears successful in that
 # it seems to smooth out consecutive values in the curves, as we would expect
@@ -323,10 +325,10 @@ nRows <- length(featureNames(GSE4987))
 nCols <- 25
 ygProfiles <- matrix(numeric(nRows * nCols), nrow = nRows, ncol = nCols)
 for (i in 1:nRows) {
-    y <- -exprs(GSE3635)[i, ]
-    y1 <- numeric()
-    y2 <-  exprs(GSE4987)[i, 1:25]
-    y3 <- -exprs(GSE4987)[i, 26:50]
+    y <-   exprs(GSE3635)[i, ]
+    y1 <-  numeric()
+    y2 <- -exprs(GSE4987)[i, 1:25]
+    y3 <-  exprs(GSE4987)[i, 26:50]
     for (j in 1:nCols) {
         if (j %% 2) { # j is odd
             y1[j] <- y[floor(j / 2) + 1]
@@ -728,7 +730,7 @@ plot(seq(0, 120, by = 5), pcaYG$rotation[,1], type = "b",
      ylim = c(-0.5, 0.5), col = myCol(length(pcaYG$sdev))[1],
      xlab = "time", ylab = "rotations")
 # This tells us that the most common variation of the data corresponds to a
-# global response in expression, right after the start of the experiment.
+# global increase in expression, right after the start of the experiment.
 
 # What about the second component?
 points(seq(0, 120, by = 5), pcaYG$rotation[,2], type = "b",
@@ -747,7 +749,7 @@ for (i in 1:12) {
 }
 par(opar)
 
-# This is pretty interesting: we see global decaying response (PC1), cyclical
+# This is pretty interesting: we see global increasing response (PC1), cyclical
 # responses that correspond to two cycles (PC2, 3, 4, and 6) - which are
 # phase-shifted, another more global change (PC5), and components that may
 # correspond to noise. Now we can ask: which genes correspond to these
